@@ -46,7 +46,8 @@ Essentially, this is a simple wrapper around pexpect_. Standard usage:
 
     ## You can optionally disable auto-enable mode if you like...
     conn = CLIMachine('route-views.routeviews.org', accts,
-        auto_priv_mode=False, log_screen=True, debug=False, command_timeout=5)
+        auto_priv_mode=False, log_screen=True, debug=False, 
+        command_timeout=5, login_attempts=3)
 
     conn.execute('term len 0', wait=0.5)    # Wait 0.5 seconds after the cmd
     conn.execute('show version', regex='test>') # regex is another prompt string
