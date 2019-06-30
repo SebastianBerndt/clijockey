@@ -44,18 +44,18 @@ _LOG_CHANNEL_STDOUT = logging.StreamHandler(sys.stdout)
 _LOG_CHANNEL_STDOUT.setFormatter(_clijockey_log_format)
 _log.addHandler(_LOG_CHANNEL_STDOUT)
 
-
 class CLIMachine(Machine):
     def __init__(self, host='', credentials=(), 
         protocols=(TCPProto('ssh', 22), TCPProto('telnet', 23),), 
         auto_priv_mode=True, check_alive=True, log_screen=False, debug=False,
-        command_timeout=30, login_timeout=20, test='', login_attempts=3):
+        command_timeout=30, login_timeout=20, test='', encoding='utf-8',
+        login_attempts=3):
         STATES = [
             'INIT', 'CHECK_ALIVE', 
             'ITER_CREDENTIALS', 'SEND_USERNAME', 'SEND_CREDENTIALS', 
-            'LOGIN_FAIL', 'CONNECT', 'LOGIN_SUCCESS_NOPRIV', 'LOGIN_SUCCESS_PRIV', 
-            'ITER_ENABLE_CREDENTIALS', 'INTERACT', 'INTERACT_TIMEOUT', 
-            'TERMINATE_CLI', 'TERMINATE_SESSION'
+            'LOGIN_FAIL', 'CONNECT', 'LOGIN_SUCCESS_NOPRIV', 
+            'LOGIN_SUCCESS_PRIV', 'ITER_ENABLE_CREDENTIALS', 
+            'INTERACT', 'INTERACT_TIMEOUT', 'TERMINATE_CLI', 'TERMINATE_SESSION'
         ]
         super(CLIMachine, self).__init__(states=STATES, initial='INIT')
         assert isinstance(credentials, tuple) or isinstance(credentials, list)
@@ -76,6 +76,8 @@ class CLIMachine(Machine):
         self.command_timeout = command_timeout
         self.login_timeout = login_timeout
         self.test = test
+
+        self.encoding = encoding # Pexpect under py3 needs a term encoding
 
         self.login_attempts_left = int(login_attempts)
 
@@ -188,7 +190,6 @@ class CLIMachine(Machine):
             self.account = next(self.nopriv_account_iter)
         except:
             # FIXME: Log an out-of-credentials error here...
-            # GUAC
             raise AuthenticationFailedError("Login failure on host {0} using the known credentials".format(self.host))
 
         if self.debug:
@@ -224,17 +225,23 @@ class CLIMachine(Machine):
         if self.debug:
             _log.debug(cmd)
 
-        self.child = pexpect.spawn(cmd, timeout=self.command_timeout)
+        # Pexpect in py3 needs an encoding parameter
+        if sys.version_info >= (3, 0):
+            self.child = pexpect.spawn(cmd, timeout=self.command_timeout, 
+                encoding=self.encoding)
+        else:
+            self.child = pexpect.spawn(cmd, timeout=self.command_timeout)
 
         if self.log_screen:
-            self.child.logfile = sys.stdout 
+            self.child.logfile = sys.stdout
 
         try:
             if self.debug:
                 _log.debug("*expect* response")
             try:
                 result = self.child.expect(['assword:', 'name:', 
-                    r'[\n\r]\S+?>', r'[\n\r]\S+?#'], timeout=self.login_timeout)
+                    '[\n\r]\S+?>', '[\n\r]\S+?#'], 
+                    timeout=self.login_timeout)
             except pexpect.EOF:
                 raise UnexpectedConnectionClose("Connection died while trying to connect to '{0}'".format(self.host))
 
@@ -383,11 +390,12 @@ class CLIMachine(Machine):
 
         # Populate self.hostname with a string
         self.child.send('\r')  # Get ready to parse out the hostname
-        result = self.child.expect(['[\n\r]\S+?>', '[\n\r]\S+?#'], 
+        result = self.child.expect(['[\n\r]+\S+?>', '[\n\r]+\S+?#'], 
             timeout=self.login_timeout)
         self.hostname = re.escape(self.response.strip().replace('>', '').replace('#', ''))
         if self.debug:
-            _log.debug("Set hostname to '{0}'".format(self.hostname))
+            _log.debug("Set hostname to {0}: {1}".format(type(self.hostname),
+                self.hostname))
             _log.debug("INTERACT mode")
         pass
 
@@ -482,8 +490,13 @@ class CLIMachine(Machine):
         if template:
             if os.path.isfile(template):
                 fh = open(template)
+
             else:
-                fh = StringIO(unicode(template))
+                if sys.version_info>=(3, 0):
+                    fh = StringIO(template)
+                else:
+                    fh = StringIO(unicode(template))
+
             fsm = TextFSM(fh)
             if self.debug:
                 _log.debug("Sending to textfsm: '''{0}'''".format(
