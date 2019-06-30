@@ -121,15 +121,14 @@ Goals
 7.  Verbose error messages and debugs.
 8.  Support both telnet and ssh
 9.  Per-session TOML_ logging (partially implemented)
-10. Python3 support (not implemented yet)
+10. Python3 support
 
 Restrictions
 ------------
 
 clijockey_ only supports `\*nix`_ (OpenSSH_ is required); no Windows support.
 
-Right now, I recommend Python_ 2.x; Python3 support is forthcoming, but a lower
-priority
+Python_ 2.x and Python3 should work correctly
 
 
 .. _pexpect: http://https://pexpect.readthedocs.io/en/stable/
